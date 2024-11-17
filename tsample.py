@@ -5,11 +5,12 @@ import gen
 
 if __name__ == '__main__':
     # Parameters
-    size = 250
-    mean1, mean2 = 19.04, 21.08
-    std1, std2 = 1.67, 1.21
+    size = 109
+    mean1, mean2 = 21.43, 16.43
+    std1, std2 = 3.15, 2.91
+    t = 7.928
     # Generate data
-    data1, data2 = gen.generate_data(size, mean1, mean2, std1, std2)
+    data1, data2 = gen.generate_data(size, mean1, mean2, std1, std2, t)
     # Output results
     # Calculating the mean and standard deviation for both datasets
     mean1_actual = np.mean(data1)
