@@ -5,7 +5,8 @@ from scipy.stats import ttest_ind
 # 设置固定的随机种子以确保结果的可复现性
 np.random.seed(42)
 
-def generate_data_worker(data1, data2, t_value, max_iterations):
+
+def generate_data_worker(data1, data2, t_value, std_target, max_iterations):
     learning_rate = 0.001
     noise_scale = 0.05
 
@@ -27,15 +28,19 @@ def generate_data_worker(data1, data2, t_value, max_iterations):
 
         current_t = (mean1 - mean2) / torch.sqrt(var1 / n1 + var2 / n2)
 
+        # 计算当前的标准差
+        current_std = torch.sqrt(var2)
+
         # 提前停止条件更严格
-        if torch.abs(current_t - t_value) < 0.001:
-            print(f"在第 {iteration} 次迭代时提前停止，当前t值: {current_t.item()}")
+        if torch.abs(current_t - t_value) < 0.001 and torch.abs(current_std - std_target) < 0.001:
+            print(f"在第 {iteration} 次迭代时提前停止，当前t值: {current_t.item()}, 当前标准差: {current_std.item()}")
             # 进入微调阶段
             fine_tune_lr = learning_rate * 0.001
             fine_tune_optimizer = torch.optim.AdamW([data2], lr=fine_tune_lr)
             for _ in range(500):
                 current_t = (mean1 - mean2) / torch.sqrt(var1 / n1 + var2 / n2)
-                loss = torch.pow(t_value - current_t, 2)
+                current_std = torch.sqrt(var2)
+                loss = torch.pow(t_value - current_t, 2) + torch.pow(std_target - current_std, 2)
                 fine_tune_optimizer.zero_grad()
                 loss.backward()
                 fine_tune_optimizer.step()
@@ -46,7 +51,7 @@ def generate_data_worker(data1, data2, t_value, max_iterations):
             return data2.detach().cpu().numpy()
 
         # 计算损失（使用平方差损失并增加敏感性）
-        loss = torch.pow(t_value - current_t, 4)
+        loss = torch.pow(t_value - current_t, 4) + torch.pow(std_target - current_std, 2)
 
         optimizer.zero_grad()
         loss.backward()
@@ -54,7 +59,7 @@ def generate_data_worker(data1, data2, t_value, max_iterations):
         optimizer.step()
         scheduler.step()
 
-        # 添加噪声（仅在前50%迭代中）
+        # 添加器序器的随机震荡（仅在前50%迭代中）
         if iteration < max_iterations // 2:
             with torch.no_grad():
                 random_noise = torch.normal(0, noise_scale, size=data2.shape, device=device) * (
@@ -69,17 +74,19 @@ def generate_data_worker(data1, data2, t_value, max_iterations):
 
     return data2.detach().cpu().numpy()
 
+
 def generate_data(size, mean1, mean2, std1, std2, t_value, max_iterations=10000):
     # 初始随机数据生成
     data1 = np.random.normal(mean1, std1, size)
-    data2 = np.random.normal(mean2, std2 * 1.5, size)  # 增加初始标准差以获得更好的多样性
+    data2 = np.random.normal(mean2, std2, size)  # 增加初始标准差以获得更好的多样性
 
     # 将数据集 1 离散化为整数
     data1 = np.round(data1)
 
-    adjusted_data2 = generate_data_worker(data1, data2, t_value, max_iterations)
+    adjusted_data2 = generate_data_worker(data1, data2, t_value, std2, max_iterations)
 
     return data1, adjusted_data2
+
 
 # 检查是否有可用的GPU
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -93,4 +100,7 @@ if __name__ == "__main__":
 
     # 验证生成的t值
     t_stat, p_value = ttest_ind(data1, data2)
+    print(p_value)
     print("生成的t值:", t_stat)
+    print("生成的标准差1:", np.std(data1))
+    print("生成的标准差2:", np.std(data2))
