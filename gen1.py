@@ -50,11 +50,11 @@ def generate_data_worker(data1, data2, t_value, std_target, max_iterations):
                 data2 = torch.round(data2)
             return data2.detach().cpu().numpy()
 
-        # 计算损失（使用平方差损失并增加敏感性）
+            # 计算损失（使用平方差损失并增加敏感性）
         loss = torch.pow(t_value - current_t, 4) + torch.pow(std_target - current_std, 2)
 
         optimizer.zero_grad()
-        loss.backward()
+        loss.backward(retain_graph=True)  # 保留计算图，以便下一次迭代使用
         torch.nn.utils.clip_grad_norm_([data2], max_norm=2.0)
         optimizer.step()
         scheduler.step()
@@ -78,7 +78,7 @@ def generate_data_worker(data1, data2, t_value, std_target, max_iterations):
 def generate_data(size, mean1, mean2, std1, std2, t_value, max_iterations=10000):
     # 初始随机数据生成
     data1 = np.random.normal(mean1, std1, size)
-    data2 = np.random.normal(mean2, std2, size)  # 增加初始标准差以获得更好的多样性
+    data2 = np.random.normal(mean2, std2, size)
 
     # 将数据集 1 离散化为整数
     data1 = np.round(data1)
@@ -92,9 +92,8 @@ def generate_data(size, mean1, mean2, std1, std2, t_value, max_iterations=10000)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"使用设备: {device}")
 
-# 示例用法
 if __name__ == "__main__":
-    data1, data2 = generate_data(size=109, mean1=21.43, mean2=16.43, std1=3.15, std2=2.91, t_value=7.928)
+    data1, data2 = generate_data(size=109, mean1=4.72, mean2=4.18, std1=1.54, std2=1.14, t_value=2.418)
     print("数据集 1:", data1)
     print("数据集 2:", data2)
 
